@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import cv2
 import numpy as np
 import os
@@ -9,10 +9,12 @@ from tensorflow import keras
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 MODELS_FOLDER = os.path.join(BASE_DIR, 'models')
+STATIC_FOLDER = os.path.join(BASE_DIR, 'static')
+PHOTOS_FOLDER = os.path.join(BASE_DIR, 'photos')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='/static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # ==================== CLASSIFIER ====================
@@ -104,6 +106,14 @@ def upload_page():
     return render_template('upload.html')
 
 
+# Serve photos
+@app.route('/photos/<filename>')
+def serve_photo(filename):
+    if not os.path.exists(PHOTOS_FOLDER):
+        return {'error': 'Photos folder not found'}, 404
+    return send_from_directory(PHOTOS_FOLDER, filename)
+
+
 @app.route('/api/classify-image', methods=['POST'])
 def classify_image():
     try:
@@ -146,5 +156,9 @@ if __name__ == '__main__':
 
     load_models()
 
+    # Get port from environment or default to 5000
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    host = '0.0.0.0'  # Listen on all interfaces for Railway
+    
+    print(f"🌐 Open: http://localhost:{port}")
+    app.run(host=host, port=port, debug=False)
