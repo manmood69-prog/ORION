@@ -85,6 +85,7 @@ class IronWaterClassifier:
         self.object_type = object_type
         self.model = None
         self.class_names = []
+        self.load_error = None
 
         # Load model with better error handling
         try:
@@ -95,45 +96,21 @@ class IronWaterClassifier:
             file_size = os.path.getsize(model_path)
             print(f"   File size: {file_size:,} bytes")
             
-            # Try multiple loading strategies
-            loaded = False
+            if file_size < 1000000:
+                raise ValueError(f"Model file too small ({file_size:,} bytes) - likely corrupted")
             
-            # Strategy 1: Standard load
+            # Try standard load
             try:
                 self.model = keras.models.load_model(model_path, compile=False)
-                print(f"✅ Model loaded successfully (standard): {object_type}")
-                loaded = True
-            except Exception as e1:
-                print(f"   Strategy 1 failed: {type(e1).__name__}")
-                
-                # Strategy 2: Load with custom_objects
-                try:
-                    self.model = keras.models.load_model(
-                        model_path, 
-                        custom_objects=None,
-                        safe_mode=False
-                    )
-                    print(f"✅ Model loaded successfully (custom_objects): {object_type}")
-                    loaded = True
-                except Exception as e2:
-                    print(f"   Strategy 2 failed: {type(e2).__name__}")
-                    
-                    # Strategy 3: Try with skip_mismatch
-                    try:
-                        self.model = keras.models.load_model(
-                            model_path,
-                            skip_mismatch=True
-                        )
-                        print(f"✅ Model loaded successfully (skip_mismatch): {object_type}")
-                        loaded = True
-                    except Exception as e3:
-                        print(f"   Strategy 3 failed: {type(e3).__name__}")
-                        raise e1
+                print(f"✅ Model loaded successfully: {object_type}")
+            except Exception as e:
+                print(f"⚠️ Model loading failed: {type(e).__name__}: {str(e)[:100]}")
+                self.load_error = str(e)
+                self.model = None
                         
         except Exception as e:
             print(f"❌ FAILED to load {object_type}: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
+            self.load_error = str(e)
             self.model = None
 
         # Set class names
@@ -164,7 +141,7 @@ class IronWaterClassifier:
 
     def classify(self, img):
         if self.model is None:
-            raise ValueError(f"Model not loaded for {self.object_type}")
+            raise ValueError(f"Model not loaded for {self.object_type}. Error: {self.load_error}")
 
         img = self.preprocess(img)
         img = np.expand_dims(img, axis=0)
@@ -206,25 +183,22 @@ def load_models():
             file_size = os.path.getsize(path)
             print(f"   Size: {file_size:,} bytes")
             
-            if file_size < 1000:
-                print(f"   ⚠️ File seems corrupted (too small)")
-                continue
-                
             classifier = IronWaterClassifier(obj, path)
             if classifier.model is not None:
                 classifiers[obj] = classifier
                 print(f"   ✅ {obj} classifier ready")
             else:
-                print(f"   ❌ {obj} classifier failed to load")
+                print(f"   ⚠️ {obj} classifier loading failed (will return error on use)")
+                classifiers[obj] = classifier  # Store even if failed, so we can return proper error
         else:
             print(f"   ❌ Model file not found: {path}")
 
     print("\n" + "="*60)
     if classifiers:
-        print(f"✅ Successfully loaded models: {list(classifiers.keys())}")
+        loaded_count = sum(1 for c in classifiers.values() if c.model is not None)
+        print(f"✅ Successfully loaded {loaded_count}/{len(classifiers)} models")
     else:
-        print(f"❌ NO MODELS LOADED! Check paths and file integrity.")
-        print(f"⚠️ If model files are corrupted, you may need to re-upload them.")
+        print(f"⚠️ No classifiers initialized")
     print("="*60 + "\n")
 
 # ==================== ROUTES ====================
@@ -254,9 +228,15 @@ def classify_image():
         print(f"\n🔍 Classification request for: {object_type}")
 
         if object_type not in classifiers:
-            error_msg = f'Model not loaded: {object_type}. Available: {list(classifiers.keys())}'
+            error_msg = f'Model not found: {object_type}. Available: {list(classifiers.keys())}'
             print(f"❌ {error_msg}")
             return jsonify({'error': error_msg}), 400
+
+        classifier = classifiers[object_type]
+        if classifier.model is None:
+            error_msg = f'Model for {object_type} failed to load. Error: {classifier.load_error}'
+            print(f"❌ {error_msg}")
+            return jsonify({'error': error_msg}), 503
 
         if 'image' not in request.files:
             print("❌ No image uploaded")
@@ -272,7 +252,7 @@ def classify_image():
             print("❌ Invalid image file")
             return jsonify({'error': 'Invalid image file'}), 400
 
-        result = classifiers[object_type].classify(img)
+        result = classifier.classify(img)
         print(f"✅ Classification result: {result}")
 
         return jsonify({
@@ -302,4 +282,5 @@ if __name__ == '__main__':
     host = '0.0.0.0'  # Listen on all interfaces for Railway
     
     print(f"🌐 Server running on http://0.0.0.0:{port}")
+    print("⚠️  App will start even if models fail to load")
     app.run(host=host, port=port, debug=False)
