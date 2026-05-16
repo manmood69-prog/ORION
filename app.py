@@ -12,6 +12,13 @@ MODELS_FOLDER = os.path.join(BASE_DIR, 'models')
 STATIC_FOLDER = os.path.join(BASE_DIR, 'static')
 PHOTOS_FOLDER = os.path.join(BASE_DIR, 'photos')
 
+print(f"📁 BASE_DIR: {BASE_DIR}")
+print(f"📁 MODELS_FOLDER: {MODELS_FOLDER}")
+print(f"📁 MODELS_FOLDER exists: {os.path.exists(MODELS_FOLDER)}")
+
+if os.path.exists(MODELS_FOLDER):
+    print(f"📁 Files in MODELS_FOLDER: {os.listdir(MODELS_FOLDER)}")
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='/static')
@@ -25,9 +32,9 @@ class IronWaterClassifier:
 
         try:
             self.model = keras.models.load_model(model_path)
-            print(f"✅ Model loaded: {object_type}")
+            print(f"✅ Model loaded: {object_type} from {model_path}")
         except Exception as e:
-            print(f"❌ Failed load {object_type}: {e}")
+            print(f"❌ Failed to load {object_type}: {e}")
             self.model = None
 
         if object_type == 'orange':
@@ -80,6 +87,10 @@ class IronWaterClassifier:
 classifiers = {}
 
 def load_models():
+    print("\n" + "="*50)
+    print("🔄 LOADING MODELS")
+    print("="*50)
+    
     model_files = {
         'orange': os.path.join(MODELS_FOLDER, 'orange_classifier.keras'),
         'banana': os.path.join(MODELS_FOLDER, 'banana_classifier.keras'),
@@ -87,12 +98,25 @@ def load_models():
     }
 
     for obj, path in model_files.items():
+        print(f"\n🔍 Checking {obj}...")
+        print(f"   Path: {path}")
+        print(f"   Exists: {os.path.exists(path)}")
+        
         if os.path.exists(path):
+            file_size = os.path.getsize(path)
+            print(f"   Size: {file_size} bytes")
+            
+            if file_size < 1000:  # Less than 1KB means corrupted/placeholder
+                print(f"   ⚠️ File seems corrupted (too small)")
+                continue
+                
             classifiers[obj] = IronWaterClassifier(obj, path)
         else:
-            print(f"⚠️ Model not found: {path}")
+            print(f"   ❌ Model file not found: {path}")
 
-    print("Loaded models:", list(classifiers.keys()))
+    print("\n" + "="*50)
+    print(f"✅ Loaded models: {list(classifiers.keys())}")
+    print("="*50 + "\n")
 
 # ==================== ROUTES ====================
 
@@ -118,12 +142,15 @@ def serve_photo(filename):
 def classify_image():
     try:
         object_type = request.form.get('object_type')
-        print("Object:", object_type)
+        print(f"\n🔍 Classification request for: {object_type}")
 
         if object_type not in classifiers:
-            return jsonify({'error': 'Invalid object type'}), 400
+            error_msg = f'Model not loaded: {object_type}. Available: {list(classifiers.keys())}'
+            print(f"❌ {error_msg}")
+            return jsonify({'error': error_msg}), 400
 
         if 'image' not in request.files:
+            print("❌ No image uploaded")
             return jsonify({'error': 'No image uploaded'}), 400
 
         file = request.files['image']
@@ -133,9 +160,11 @@ def classify_image():
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         if img is None:
+            print("❌ Invalid image file")
             return jsonify({'error': 'Invalid image file'}), 400
 
         result = classifiers[object_type].classify(img)
+        print(f"✅ Classification result: {result}")
 
         return jsonify({
             'success': True,
@@ -143,15 +172,18 @@ def classify_image():
         })  
 
     except Exception as e:
-        print("❌ ERROR:", e)
-        return jsonify({'error': str(e)}), 500
+        error_msg = str(e)
+        print(f"❌ ERROR: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
 
 
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
-    print("="*50)
-    print("🚀 STARTING APP")
+    print("\n" + "="*50)
+    print("🚀 STARTING ORION APP")
     print("="*50)
 
     load_models()
@@ -160,5 +192,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     host = '0.0.0.0'  # Listen on all interfaces for Railway
     
-    print(f"🌐 Open: http://localhost:{port}")
+    print(f"🌐 Server running on http://0.0.0.0:{port}")
     app.run(host=host, port=port, debug=False)
