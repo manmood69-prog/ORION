@@ -3,11 +3,12 @@ import cv2
 import numpy as np
 import os
 import warnings
+import urllib.request
 warnings.filterwarnings('ignore')
 
 # Suppress TensorFlow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-from tensorflow import bin
+from tensorflow import keras
 
 # ==================== CONFIG ====================
 
@@ -17,7 +18,50 @@ MODELS_FOLDER = os.path.join(BASE_DIR, 'models')
 STATIC_FOLDER = os.path.join(BASE_DIR, 'static')
 PHOTOS_FOLDER = os.path.join(BASE_DIR, 'photos')
 
-print(f"📁 BASE_DIR: {BASE_DIR}")
+# Ensure models folder exists
+os.makedirs(MODELS_FOLDER, exist_ok=True)
+
+# ==================== AUTO-DOWNLOAD MODELS ====================
+
+# Direct Google Drive download links (converted from share links)
+model_urls = {
+    "orange_classifier.keras": "https://drive.google.com/uc?export=download&id=13GQSTqLghiw5_NmoTQBSlvFjhhgzEelg",
+    "banana_classifier.keras": "https://drive.google.com/uc?export=download&id=1yhl_qkeoIwAzY2NZRpO0qQTgPCUqth38",
+    "egg_classifier.keras": "https://drive.google.com/uc?export=download&id=1wtnWQ_MUBkpYvqqJZaZbBeWvmaCwH6Dk"
+}
+
+def download_models():
+    """Auto-download models from Google Drive if they don't exist or are corrupted"""
+    print("\n" + "="*60)
+    print("📥 CHECKING MODELS...")
+    print("="*60)
+    
+    for model_name, url in model_urls.items():
+        model_path = os.path.join(MODELS_FOLDER, model_name)
+        
+        # Check if file exists and has reasonable size
+        file_exists = os.path.exists(model_path)
+        file_size = os.path.getsize(model_path) if file_exists else 0
+        
+        if file_exists and file_size > 1000000:  # More than 1MB = good
+            print(f"✅ {model_name} exists ({file_size:,} bytes)")
+        else:
+            if file_exists:
+                print(f"⚠️ {model_name} corrupted/small ({file_size:,} bytes), re-downloading...")
+            else:
+                print(f"📥 Downloading {model_name}...")
+            
+            try:
+                urllib.request.urlretrieve(url, model_path)
+                new_size = os.path.getsize(model_path)
+                print(f"✅ {model_name} downloaded! ({new_size:,} bytes)")
+            except Exception as e:
+                print(f"❌ Failed to download {model_name}: {e}")
+
+# Download models on startup
+download_models()
+
+print(f"\n📁 BASE_DIR: {BASE_DIR}")
 print(f"📁 MODELS_FOLDER: {MODELS_FOLDER}")
 print(f"📁 MODELS_FOLDER exists: {os.path.exists(MODELS_FOLDER)}")
 
@@ -56,7 +100,7 @@ class IronWaterClassifier:
             
             # Strategy 1: Standard load
             try:
-                self.model = bin.models.load_model(model_path, compile=False)
+                self.model = keras.models.load_model(model_path, compile=False)
                 print(f"✅ Model loaded successfully (standard): {object_type}")
                 loaded = True
             except Exception as e1:
@@ -64,7 +108,7 @@ class IronWaterClassifier:
                 
                 # Strategy 2: Load with custom_objects
                 try:
-                    self.model = bin.models.load_model(
+                    self.model = keras.models.load_model(
                         model_path, 
                         custom_objects=None,
                         safe_mode=False
@@ -76,7 +120,7 @@ class IronWaterClassifier:
                     
                     # Strategy 3: Try with skip_mismatch
                     try:
-                        self.model = bin.models.load_model(
+                        self.model = keras.models.load_model(
                             model_path,
                             skip_mismatch=True
                         )
@@ -148,9 +192,9 @@ def load_models():
     print("="*60)
     
     model_files = {
-        'orange': os.path.join(MODELS_FOLDER, 'orange_classifier.bin'),
-        'banana': os.path.join(MODELS_FOLDER, 'banana_classifier.bin'),
-        'egg': os.path.join(MODELS_FOLDER, 'egg_classifier.bin')
+        'orange': os.path.join(MODELS_FOLDER, 'orange_classifier.keras'),
+        'banana': os.path.join(MODELS_FOLDER, 'banana_classifier.keras'),
+        'egg': os.path.join(MODELS_FOLDER, 'egg_classifier.keras')
     }
 
     for obj, path in model_files.items():
