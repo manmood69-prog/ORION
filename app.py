@@ -7,13 +7,13 @@ warnings.filterwarnings('ignore')
 
 # Suppress TensorFlow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-from tensorflow import keras
+from tensorflow import bin
 
 # ==================== CONFIG ====================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
-MODELS_FOLDER = os.path.join(BASE_DIR)
+MODELS_FOLDER = os.path.join(BASE_DIR, 'models')
 STATIC_FOLDER = os.path.join(BASE_DIR, 'static')
 PHOTOS_FOLDER = os.path.join(BASE_DIR, 'photos')
 
@@ -56,7 +56,7 @@ class IronWaterClassifier:
             
             # Strategy 1: Standard load
             try:
-                self.model = keras.models.load_model(model_path, compile=False)
+                self.model = bin.models.load_model(model_path, compile=False)
                 print(f"✅ Model loaded successfully (standard): {object_type}")
                 loaded = True
             except Exception as e1:
@@ -64,7 +64,7 @@ class IronWaterClassifier:
                 
                 # Strategy 2: Load with custom_objects
                 try:
-                    self.model = keras.models.load_model(
+                    self.model = bin.models.load_model(
                         model_path, 
                         custom_objects=None,
                         safe_mode=False
@@ -76,7 +76,7 @@ class IronWaterClassifier:
                     
                     # Strategy 3: Try with skip_mismatch
                     try:
-                        self.model = keras.models.load_model(
+                        self.model = bin.models.load_model(
                             model_path,
                             skip_mismatch=True
                         )
@@ -148,9 +148,9 @@ def load_models():
     print("="*60)
     
     model_files = {
-        'orange': os.path.join(MODELS_FOLDER, 'orange_classifier.keras'),
-        'banana': os.path.join(MODELS_FOLDER, 'banana_classifier.keras'),
-        'egg': os.path.join(MODELS_FOLDER, 'egg_classifier.keras')
+        'orange': os.path.join(MODELS_FOLDER, 'orange_classifier.bin'),
+        'banana': os.path.join(MODELS_FOLDER, 'banana_classifier.bin'),
+        'egg': os.path.join(MODELS_FOLDER, 'egg_classifier.bin')
     }
 
     for obj, path in model_files.items():
